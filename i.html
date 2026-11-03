@@ -94,8 +94,10 @@ function badgeView(){
       <button class="link" data-att="no">لن أتمكن من الحضور</button>
     </div>`;
   drawQR(myUrl());
+  if (SAMSUNG) flatten();
   document.getElementById('dl').onclick = async () => {
-    const c = await html2canvas(document.getElementById('badge'), { scale: 3, backgroundColor: null });
+    const shown = document.getElementById('badgeImg');
+    const c = shown || await html2canvas(document.getElementById('badge'), { scale: 3, backgroundColor: null });
     const a = document.createElement('a'); a.download = g.badge + '.png'; a.href = c.toDataURL('image/png'); a.click();
   };
   document.getElementById('cal').onclick = () => {
@@ -105,6 +107,28 @@ function badgeView(){
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics], {type:'text/calendar'})); a.download = 'mirage-event.ics'; a.click();
   };
 }
+
+const SAMSUNG = /SamsungBrowser/i.test(navigator.userAgent);
+// Samsung Internet's forced dark mode dims every element and image, but leaves <canvas> untouched.
+// So on Samsung we paint the badge (and the page logo) into a canvas and show that instead.
+async function flatten(){
+  try {
+    await (document.fonts ? document.fonts.ready : Promise.resolve());
+    await Promise.all([...document.querySelectorAll('#badge img')].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+    const el = document.getElementById('badge'); if (!el) return;
+    const c = await html2canvas(el, { scale: 3, backgroundColor: null });
+    c.id = 'badgeImg'; c.className = 'badge'; c.style.width = el.offsetWidth + 'px'; c.style.height = el.offsetHeight + 'px';
+    c.style.maxWidth = '100%'; c.style.height = 'auto'; c.style.display = 'block';
+    el.replaceWith(c);
+  } catch (e) { /* keep the HTML badge if anything fails */ }
+}
+function flattenLogo(){
+  const img = document.querySelector('img.mark'); if (!img) return;
+  const go = () => { const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0); c.className = 'mark'; c.style.height = 'auto'; c.setAttribute('aria-label', img.alt); img.replaceWith(c); };
+  img.complete ? go() : img.addEventListener('load', go);
+}
+if (SAMSUNG) flattenLogo();
 
 function drawQR(text){
   const q = qrcode(0, 'M'); q.addData(text); q.make();
