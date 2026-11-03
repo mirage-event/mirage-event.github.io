@@ -42,6 +42,7 @@ function pendingView(){
     <p class="desc" style="margin-bottom:6px">شكراً ${esc(r.name)}، تم استلام تسجيلكم في <b>${esc(ev.name_ar)}</b>.<br>سيتم إشعاركم فور اعتماد الطلب، وتظهر بطاقة الدخول في هذه الصفحة.</p>
     <p class="note" style="margin:0 0 4px">${evLine(ev)}</p>
     ${saveBox()}
+    <p class="note" style="margin:10px 0 0">إذا أدخلتم بريداً إلكترونياً، تصلكم البطاقة عليه أيضاً — يُرجى التحقق من مجلد الرسائل غير المرغوب فيها (Spam).</p>
     <button class="link" id="refresh">تحديث الحالة</button>
     <p class="note">رقم الطلب: <span class="en">${esc(r.badge)}</span></p></div>`;
   bindCopy(); document.getElementById('refresh').onclick = load;
