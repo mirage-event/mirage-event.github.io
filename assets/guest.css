@@ -1,3 +1,4 @@
+:root{color-scheme:dark only}
 :root{--bg:#05141d;--deep:#071c28;--card:rgba(13,42,58,.55);--cyan:#1cc8ee;--cyan2:#7fe3f8;--ink:#eaf7fb;--mute:#8fb3c2;--line:rgba(127,227,248,.18);--bad:#ff7b7b;--ok:#7ff0c6;--warn:#ffd27a}
 *{box-sizing:border-box}html,body{margin:0}[hidden]{display:none!important}
 body{min-height:100vh;font-family:"IBM Plex Sans Arabic",system-ui,sans-serif;color:var(--ink);line-height:1.7;
