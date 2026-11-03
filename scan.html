@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#05141d">
+<link rel="icon" href="assets/favicon.png">
+<title>ماسح البوابة · MIRAGE</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .scan-grid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr) 340px}
+  @media(max-width:860px){.scan-grid{grid-template-columns:1fr}}
+  #reader{border-radius:var(--r);overflow:hidden;background:#000;min-height:300px;border:1px solid var(--line)}
+  #reader video{width:100%!important;object-fit:cover}
+  #result{border-radius:var(--r);padding:22px;text-align:center;border:2px solid var(--line);background:var(--card);min-height:200px;display:flex;flex-direction:column;justify-content:center;transition:background .2s,border-color .2s}
+  #result .big{font-size:22px;font-weight:700;margin:6px 0}
+  #result .name{font-size:26px;font-weight:700}
+  #result.ok{border-color:var(--ok);background:#0c3a2a}
+  #result.already{border-color:var(--warn);background:#3a2e0c}
+  #result.bad{border-color:var(--bad);background:#3a1212}
+  #result.wait{opacity:.7}
+  .count{font-size:44px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums;line-height:1}
+</style>
+</head><body>
+<header class="top">
+  <span class="logo"><img src="assets/logo-wordmark.png" alt="MIRAGE"></span>
+  <span class="muted small hide-sm">ماسح البوابة</span>
+  <nav><span class="muted small" id="who" style="padding:6px 0"></span><a href="#" id="logout" hidden>خروج</a></nav>
+</header>
+
+<!-- PIN gate -->
+<div class="center" id="gate" style="min-height:calc(100vh - 60px)">
+  <form class="login card" id="pinform">
+    <img src="assets/logo-full.png" alt="MIRAGE Smart City" style="display:block;width:170px;margin:4px auto 22px">
+    <h2 style="text-align:center">ماسح البوابة</h2>
+    <div class="flash err" id="pinerr" hidden></div>
+    <label for="user">اسم المستخدم</label>
+    <input id="user" dir="ltr" required autocomplete="username" style="margin-bottom:12px">
+    <label for="pin">كلمة السر</label>
+    <input id="pin" type="password" required autocomplete="current-password">
+    <button class="btn" style="width:100%;margin-top:14px" id="pinbtn">دخول</button>
+  </form>
+</div>
+
+<main class="wrap" id="main" hidden>
+  <div class="toolbar">
+    <h1 style="margin:0">ماسح البوابة</h1>
+    <select id="ev" style="max-width:320px;margin-inline-start:auto"></select>
+  </div>
+  <div class="scan-grid">
+    <div>
+      <div id="reader"></div>
+      <div class="toolbar" style="margin-top:12px">
+        <button class="btn" id="start">تشغيل الكاميرا</button>
+        <button class="btn ghost" id="stop" hidden>إيقاف</button>
+        <span class="muted small" id="camstatus"></span>
+      </div>
+    </div>
+    <div class="grid">
+      <div id="result"><div class="muted">وجّه الكاميرا على QR البادج</div></div>
+      <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+        <div><div class="muted small">داخل الآن</div><div class="count" id="inside">—</div></div>
+        <div style="text-align:end"><div class="muted small">من المعتمدين</div><div style="font-size:22px;font-weight:700" id="yes">—</div></div>
+      </div>
+      <form class="card" id="manual">
+        <label>إدخال يدوي (الصق الرابط أو الرمز)</label>
+        <div style="display:flex;gap:8px"><input id="code" dir="ltr" autocomplete="off"><button class="btn">تحقق</button></div>
+      </form>
+    </div>
+  </div>
+</main>
+
+<script src="config.js"></script>
+<script src="assets/api.js"></script>
+<script src="assets/vendor/html5-qrcode.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let S = store.get('mrg_scan_s'), scanner = null, last = '', lastAt = 0, busy = false;
+const res = $('result'), evSel = $('ev');
+
+async function enter(){
+  const d = await API.post({ a: 'events', s: S });
+  if (!d.ok) { store.set('mrg_scan_s', null); S = null; return false; }
+  const saved = store.get('mrg_event');
+  evSel.innerHTML = d.events.map(e => `<option value="${esc(e.code)}">${esc(e.name_ar)} — ${esc(fmtAr(e.date))}</option>`).join('');
+  if (saved && d.events.some(e => e.code === saved)) evSel.value = saved;
+  $('gate').hidden = true; $('main').hidden = false; $('logout').hidden = false; $('who').textContent = store.get('mrg_scan_n') || '';
+  refresh(); return true;
+}
+async function login(){
+  $('pinbtn').disabled = true; $('pinerr').hidden = true;
+  try {
+    const d = await API.post({ a: 'login', user: $('user').value, pass: $('pin').value });
+    if (!d.ok) throw new Error(d.msg || 'خطأ');
+    S = d.session; store.set('mrg_scan_s', S); store.set('mrg_scan_n', d.user.name);
+    await enter();
+  } catch (err) { $('pinerr').textContent = err.message || 'تعذّر الاتصال'; $('pinerr').hidden = false; }
+  $('pinbtn').disabled = false;
+}
+
+function beep(ok){
+  try { const a = new (window.AudioContext||window.webkitAudioContext)(), o = a.createOscillator(), g = a.createGain();
+    o.frequency.value = ok ? 880 : 220; o.connect(g); g.connect(a.destination); g.gain.value = .15; o.start(); o.stop(a.currentTime + (ok ? .15 : .45)); } catch(e){}
+  if (navigator.vibrate) navigator.vibrate(ok ? 80 : [200,80,200]);
+}
+
+async function check(code){
+  const now = Date.now();
+  if (busy || (code === last && now - lastAt < 5000)) return;   // same badge held in front of the camera
+  busy = true; last = code; lastAt = now;
+  res.className = 'wait'; res.innerHTML = '<div class="muted">جاري التحقق…</div>';
+  try {
+    const d = await API.post({ a: 'checkin', s: S, code, event: evSel.value });
+    if (d.error === 'auth') { store.set('mrg_scan_s', null); location.reload(); return; }
+    show(d);
+  } catch (e) { show({ status: 'bad', msg: 'مشكلة اتصال — جرّب مرة ثانية' }); last = ''; }
+  busy = false; refresh();
+}
+
+function show(d){
+  const cls = d.status === 'ok' ? 'ok' : d.status === 'already' ? 'already' : 'bad';
+  const icon = cls === 'ok' ? '✓' : cls === 'already' ? '!' : '✕', g = d.reg;
+  res.className = cls;
+  res.innerHTML = `<div style="font-size:42px;line-height:1">${icon}</div><div class="big">${esc(d.msg || 'خطأ')}</div>`
+    + (g ? `<div class="name">${esc(g.name)}</div><div class="muted">${esc([g.title, g.org].filter(Boolean).join(' · '))}</div>
+            <div style="margin-top:10px"><span class="pill cat" style="${g.type === 'vip' ? 'background:#e6c36a;color:#2a2005;border-color:#e6c36a' : ''}">${g.type === 'vip' ? 'VIP' : 'GUEST'}</span> <span class="muted small en">${esc(g.badge)}</span></div>` : '');
+  beep(cls === 'ok');
+}
+
+async function refresh(){
+  if (!S || !evSel.value) return;
+  try { const d = await API.post({ a: 'stats', s: S, event: evSel.value });
+    if (d.ok) { $('inside').textContent = d.counts.in; $('yes').textContent = d.counts.approved; } } catch(e){}
+}
+
+$('pinform').onsubmit = e => { e.preventDefault(); login(); };
+$('logout').onclick = async e => { e.preventDefault(); try { await API.post({ a: 'logout', s: S }); } catch(_){} store.set('mrg_scan_s', null); location.reload(); };
+$('start').onclick = async () => {
+  $('camstatus').textContent = 'جاري تشغيل الكاميرا…';
+  try {
+    scanner = scanner || new Html5Qrcode('reader');
+    await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 250, height: 250 } }, t => check(t));
+    $('start').hidden = true; $('stop').hidden = false; $('camstatus').textContent = '';
+  } catch (e) { $('camstatus').textContent = 'ما قدرناش نفتح الكاميرا. اسمح للمتصفح باستخدامها.'; }
+};
+$('stop').onclick = async () => { await scanner?.stop(); $('start').hidden = false; $('stop').hidden = true; };
+$('manual').onsubmit = e => { e.preventDefault(); last = ''; check($('code').value.trim()); $('code').value = ''; };
+evSel.onchange = () => { store.set('mrg_event', evSel.value); refresh(); };
+
+if (!API.configured()) { $('pinerr').textContent = 'الموقع غير مربوط بالشيت بعد (config.js).'; $('pinerr').hidden = false; }
+else if (S) enter().catch(() => {});
+setInterval(refresh, 30000);   // light polling — Apps Script is free but not instant
+</script>
+</body></html>

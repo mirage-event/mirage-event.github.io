@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#05141d">
+<link rel="icon" href="assets/favicon.png">
+<title>الإدارة · MIRAGE RSVP</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 0 18px;overflow-x:auto}
+  .tabs button{background:none;border:0;color:var(--mute);font:inherit;font-weight:600;padding:12px 16px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+  .tabs button.on{color:var(--ink);border-bottom-color:var(--cyan)}
+  .tabs .cnt{display:inline-block;min-width:22px;padding:0 6px;border-radius:99px;background:var(--warn);color:#221;font-size:12px;margin-inline-start:6px}
+  .linkbox{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .linkbox code{direction:ltr;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12.5px;color:var(--cyan2);flex:1;min-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .req{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid #123446}
+  .req:last-child{border-bottom:0}
+  .req .who strong{font-size:16px}
+  .req .meta{color:var(--mute);font-size:13px}
+  .req .meta{display:flex;flex-wrap:wrap;gap:4px 14px}
+  .done{color:var(--ok);font-size:13px;font-weight:600}
+  .pill.vip{color:#2a2005;background:#e6c36a;border-color:#e6c36a}
+  .pill.pend{color:var(--warn);border-color:#5a4a1f}
+  textarea{min-height:110px}
+  .empty{color:var(--mute);text-align:center;padding:30px 0}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--cyan);padding:10px 18px;border-radius:10px;z-index:20}
+  @media(max-width:640px){.req{grid-template-columns:1fr}}
+</style>
+</head><body>
+<header class="top">
+  <span class="logo"><img src="assets/logo-wordmark.png" alt="MIRAGE"></span>
+  <span class="muted small hide-sm">إدارة التسجيلات</span>
+  <nav><span class="muted small" id="who" style="padding:6px 0"></span><a href="scan.html">الماسح</a><a href="#" id="logout" hidden>خروج</a></nav>
+</header>
+
+<div class="center" id="gate" style="min-height:calc(100vh - 60px)">
+  <form class="login card" id="loginf">
+    <img src="assets/logo-full.png" alt="MIRAGE Smart City" style="display:block;width:170px;margin:4px auto 22px">
+    <h2 style="text-align:center">لوحة الإدارة</h2>
+    <div class="flash err" id="lerr" hidden></div>
+    <label for="u">اسم المستخدم</label><input id="u" autocomplete="username" dir="ltr" required style="margin-bottom:12px">
+    <label for="p">كلمة السر</label><input id="p" type="password" autocomplete="current-password" required>
+    <button class="btn" style="width:100%;margin-top:16px" id="lbtn">دخول</button>
+  </form>
+</div>
+
+<main class="wrap" id="main" hidden>
+  <div class="toolbar" style="justify-content:space-between">
+    <h1 style="margin:0" id="evname">—</h1>
+    <select id="ev" style="max-width:340px"></select>
+  </div>
+  <p class="sub" id="evline" style="margin-top:4px"></p>
+
+  <div class="stats">
+    <div class="stat"><div class="n" data-k="total">—</div><div class="l">كل التسجيلات</div></div>
+    <div class="stat"><div class="n" data-k="vip">—</div><div class="l">VIP</div></div>
+    <div class="stat" style="border-color:#5a4a1f"><div class="n" data-k="pending" style="color:var(--warn)">—</div><div class="l">بانتظار الموافقة</div></div>
+    <div class="stat"><div class="n" data-k="approved">—</div><div class="l">معتمد</div></div>
+    <div class="stat"><div class="n" data-k="rejected">—</div><div class="l">مرفوض</div></div>
+    <div class="stat hi"><div class="n" data-k="in">—</div><div class="l">حضروا</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
+    <div class="muted small" style="margin-bottom:8px">رابط التسجيل العام <span id="openflag"></span></div>
+    <div class="linkbox"><code id="publink"></code><button class="btn sm ghost" id="copypub">نسخ</button><a class="btn sm ghost" id="openpub" target="_blank" rel="noopener">فتح</a></div>
+  </div>
+
+  <div class="tabs">
+    <button data-tab="pending" class="on">الطلبات<span class="cnt" id="pcnt">0</span></button>
+    <button data-tab="all">كل المسجلين</button>
+    <button data-tab="vip">دعوات VIP</button>
+  </div>
+
+  <section class="card" data-pane="pending"><div id="plist"></div></section>
+
+  <section class="card" data-pane="all" hidden>
+    <div class="toolbar">
+      <input id="q" placeholder="بحث بالاسم أو الهاتف أو الجهة أو رقم البطاقة…" style="max-width:320px">
+      <select id="fst" style="max-width:170px"><option value="">كل الحالات</option><option value="pending">قيد المراجعة</option><option value="approved">معتمد</option><option value="rejected">مرفوض</option><option value="in">حضروا</option></select>
+      <select id="fty" style="max-width:140px"><option value="">كل الأنواع</option><option value="vip">VIP</option><option value="public">عام</option></select>
+      <button class="btn sm ghost" id="csv" style="margin-inline-start:auto">تصدير CSV</button>
+    </div>
+    <div class="tablewrap"><table id="atable"></table></div>
+  </section>
+
+  <section data-pane="vip" hidden>
+    <div class="card" style="margin-bottom:16px">
+      <h2>دعوات VIP جديدة</h2>
+      <p class="muted small">كل سطر = دعوة: <b>الاسم، الهاتف</b> (الهاتف اختياري — يُستخدم لزر الواتساب). كل دعوة رابط شخصي يُستخدم مرة واحدة.</p>
+      <textarea id="vipin" placeholder="أحمد سالم الورفلي، 0912345678&#10;د. فاطمة الزوي، 0923456789&#10;مدير مصرف الجمهورية"></textarea>
+      <div class="toolbar" style="margin:12px 0 0"><button class="btn" id="vipgo">إنشاء الدعوات</button><span class="muted small" id="vipmsg"></span></div>
+    </div>
+    <div class="card"><div class="tablewrap"><table id="vtable"></table></div></div>
+  </section>
+</main>
+<div id="toast" hidden></div>
+
+<script src="config.js"></script>
+<script src="assets/api.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let S = store.get('mrg_admin_s'), USER = null, EVENTS = [], REGS = [], INV = [];
+const ev = () => EVENTS.find(e => e.code === $('ev').value) || {};
+const call = async (body) => {
+  const d = await API.post(Object.assign({ s: S }, body));
+  if (d.error === 'auth') { store.set('mrg_admin_s', null); location.reload(); throw 0; }
+  return d;
+};
+function toast(t){ const x = $('toast'); x.textContent = t; x.hidden = false; clearTimeout(x._t); x._t = setTimeout(() => x.hidden = true, 2200); }
+function copy(t){ navigator.clipboard.writeText(t).then(() => toast('تم النسخ ✓')); }
+
+// ---------- auth
+$('loginf').onsubmit = async e => {
+  e.preventDefault(); $('lbtn').disabled = true; $('lerr').hidden = true;
+  try {
+    const d = await API.post({ a: 'login', user: $('u').value, pass: $('p').value });
+    if (!d.ok) throw new Error(d.msg || 'خطأ');
+    if (d.user.role !== 'admin') throw new Error('هذا الحساب لموظف استقبال — استخدم صفحة الماسح.');
+    S = d.session; store.set('mrg_admin_s', S); store.set('mrg_admin_n', d.user.name); start();
+  } catch (err) { $('lerr').textContent = err.message || 'تعذّر الاتصال'; $('lerr').hidden = false; }
+  $('lbtn').disabled = false;
+};
+$('logout').onclick = async e => { e.preventDefault(); try { await API.post({ a: 'logout', s: S }); } catch(_){} store.set('mrg_admin_s', null); location.reload(); };
+
+async function start(){
+  const d = await call({ a: 'events' });
+  if (!d.ok) return;
+  EVENTS = d.events;
+  $('ev').innerHTML = EVENTS.map(e => `<option value="${esc(e.code)}">${esc(e.name_ar)} — ${esc(fmtAr(e.date))}</option>`).join('');
+  const saved = store.get('mrg_admin_ev'); if (saved && EVENTS.some(e => e.code === saved)) $('ev').value = saved;
+  $('gate').hidden = true; $('main').hidden = false; $('logout').hidden = false; $('who').textContent = store.get('mrg_admin_n') || '';
+  loadEvent();
+}
+
+// ---------- event
+async function loadEvent(){
+  const e = ev(); store.set('mrg_admin_ev', e.code);
+  $('evname').textContent = e.name_ar || '—';
+  $('evline').textContent = [fmtAr(e.date), e.time, e.venue_ar, e.code].filter(Boolean).join(' · ');
+  const pub = siteBase() + 'r.html?e=' + encodeURIComponent(e.code);
+  $('publink').textContent = pub; $('openpub').href = pub;
+  $('openflag').innerHTML = e.public_open ? '<span class="pill ok">مفتوح</span>' : '<span class="pill no">مغلق — غيّره من تاب الأحداث في الشيت</span>';
+  await Promise.all([loadRegs(), loadVip()]);
+}
+async function loadRegs(){
+  const d = await call({ a: 'list', event: ev().code });
+  REGS = d.regs || []; renderStats(); renderPending(); renderAll();
+}
+function renderStats(){
+  const c = { total: REGS.length, vip: 0, pending: 0, approved: 0, rejected: 0, in: 0 };
+  REGS.forEach(r => { if (r.type === 'vip') c.vip++; c[r.status]++; if (r.checked_in) c.in++; });
+  for (const k in c) { const el = document.querySelector(`[data-k="${k}"]`); if (el) el.textContent = c[k]; }
+  $('pcnt').textContent = c.pending;
+}
+
+const ATT_AR = { yes: 'أؤكد حضوري', no: 'لن أحضر', maybe: 'غير متأكد' };
+const ST_AR = { pending: 'قيد المراجعة', approved: 'معتمد', rejected: 'مرفوض' };
+function badgeLink(r){ return siteBase() + 'i.html?t=' + r.token; }
+function waPhone(p){ let d = String(p || '').replace(/\D+/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = '218' + d.slice(1); if (d.length === 9) d = '218' + d; return d; }
+function waBadge(r){
+  const e = ev(), p = waPhone(r.phone); if (!p) return '';
+  const t = `السيد/ة ${r.name}،\n\nتم اعتماد تسجيلكم في: ${e.name_ar}\n📅 ${fmtAr(e.date)}${e.time ? ' — ' + e.time : ''}${e.venue_ar ? '\n📍 ' + e.venue_ar : ''}\n\nبطاقة الدخول الخاصة بكم (QR):\n${badgeLink(r)}\n\nيرجى إبراز البطاقة عند البوابة. البطاقة شخصية وغير قابلة للتحويل.`;
+  return 'https://wa.me/' + p + '?text=' + encodeURIComponent(t);
+}
+
+// ---------- pending
+function renderPending(){
+  const list = REGS.filter(r => r.status === 'pending').sort((a, b) => a.created.localeCompare(b.created));
+  $('plist').innerHTML = list.length ? list.map(r => `
+    <div class="req" data-t="${esc(r.token)}">
+      <div class="who"><strong>${esc(r.name)}</strong> <span class="pill">${esc(r.gender)}</span>
+        <div class="meta"><span>${esc(r.title)} · ${esc(r.org)}</span></div>
+        <div class="meta"><span dir="ltr">${esc(r.phone)}</span>${r.email ? `<span dir="ltr">${esc(r.email)}</span>` : ''}<span>${esc(ATT_AR[r.attend])}</span><span>${esc(r.created)}</span></div></div>
+      <div class="actions"><button class="btn" data-d="approve">موافقة</button><button class="btn danger" data-d="reject">رفض</button></div>
+    </div>`).join('') : '<div class="empty">ما فيش طلبات بانتظار الموافقة ✓</div>';
+}
+$('plist').addEventListener('click', async e => {
+  const b = e.target.closest('[data-d]'); if (!b) return;
+  const row = b.closest('[data-t]'); row.querySelectorAll('button').forEach(x => x.disabled = true);
+  const d = await call({ a: 'decide', t: row.dataset.t, d: b.dataset.d });
+  if (!d.ok) { toast('ما تمش — حاول مرة ثانية'); row.querySelectorAll('button').forEach(x => x.disabled = false); return; }
+  const i = REGS.findIndex(r => r.token === d.reg.token); if (i >= 0) REGS[i] = d.reg;
+  row.querySelector('.actions').innerHTML = b.dataset.d === 'approve'
+    ? `<span class="done">✓ معتمد${d.emailed ? ' · انبعت إيميل' : ''}</span>${d.wa ? `<a class="btn sm wa" href="${esc(d.wa)}" target="_blank" rel="noopener">إرسال البادج واتساب</a>` : ''}`
+    : '<span class="done" style="color:var(--bad)">✕ مرفوض</span>';
+  renderStats(); renderAll();
+});
+
+// ---------- all
+function filtered(){
+  const q = $('q').value.trim().toLowerCase(), st = $('fst').value, ty = $('fty').value;
+  return REGS.filter(r => (!q || [r.name, r.phone, r.org, r.badge, r.email].join(' ').toLowerCase().includes(q))
+    && (!st || (st === 'in' ? r.checked_in : r.status === st)) && (!ty || r.type === ty))
+    .sort((a, b) => b.created.localeCompare(a.created));
+}
+function renderAll(){
+  const rows = filtered();
+  $('atable').innerHTML = `<tr><th>البطاقة</th><th>الاسم</th><th>النوع</th><th>الحالة</th><th>الحضور</th><th>الدخول</th><th></th></tr>` + (rows.length ? rows.map(r => `
+    <tr data-t="${esc(r.token)}">
+      <td class="en small muted">${esc(r.badge)}</td>
+      <td><strong>${esc(r.name)}</strong><br><span class="muted small">${esc(r.title)} · ${esc(r.org)} · <span dir="ltr">${esc(r.phone)}</span></span></td>
+      <td>${r.type === 'vip' ? '<span class="pill vip">VIP</span>' : '<span class="pill">عام</span>'}</td>
+      <td><span class="pill ${r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'no' : 'pend'}">${ST_AR[r.status]}</span></td>
+      <td class="small">${esc(ATT_AR[r.attend])}</td>
+      <td>${r.checked_in ? `<span class="pill in">${esc(r.checkin_at.slice(11))}</span><br><span class="muted small">${esc(r.checkin_by)}</span>` : '<span class="muted">—</span>'}</td>
+      <td class="actions">
+        ${r.status === 'approved' ? `<a class="btn sm ghost" href="${esc(badgeLink(r))}" target="_blank" rel="noopener">البادج</a>${waBadge(r) ? `<a class="btn sm wa" href="${esc(waBadge(r))}" target="_blank" rel="noopener">واتساب</a>` : ''}` : ''}
+        ${r.status !== 'approved' ? '<button class="btn sm ghost" data-d="approve">موافقة</button>' : ''}
+        ${r.status !== 'rejected' ? '<button class="btn sm danger" data-d="reject">رفض</button>' : ''}
+      </td></tr>`).join('') : '<tr><td colspan="7" class="empty">ما فيش نتائج</td></tr>');
+}
+['q', 'fst', 'fty'].forEach(id => $(id).addEventListener('input', renderAll));
+$('atable').addEventListener('click', async e => {
+  const b = e.target.closest('[data-d]'); if (!b) return;
+  if (b.dataset.d === 'reject' && !confirm('رفض هذا التسجيل؟ البادج متاعه يتوقف عند البوابة.')) return;
+  b.disabled = true;
+  const d = await call({ a: 'decide', t: b.closest('[data-t]').dataset.t, d: b.dataset.d });
+  if (d.ok) { const i = REGS.findIndex(r => r.token === d.reg.token); REGS[i] = d.reg; renderStats(); renderPending(); renderAll(); toast(d.emailed ? 'تم — وانبعت إيميل' : 'تم'); }
+});
+$('csv').onclick = () => {
+  const head = ['رقم البطاقة','النوع','الحالة','الاسم','الهاتف','الإيميل','المسمى','الجهة','الجنس','تأكيد الحضور','وقت التسجيل','القرار بواسطة','وقت الدخول','دخل بواسطة','رابط البطاقة'];
+  const lines = filtered().map(r => [r.badge, r.type === 'vip' ? 'VIP' : 'عام', ST_AR[r.status], r.name, r.phone, r.email, r.title, r.org, r.gender, ATT_AR[r.attend], r.created, r.decided_by, r.checkin_at, r.checkin_by, badgeLink(r)]);
+  const csv = '﻿' + [head, ...lines].map(l => l.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = ev().code + '-registrations.csv'; a.click();
+};
+
+// ---------- VIP
+async function loadVip(){ const d = await call({ a: 'vip_list', event: ev().code }); INV = d.invites || []; renderVip(); }
+function renderVip(){
+  const ST = { open: '<span class="pill">متاحة</span>', used: '<span class="pill ok">مستخدمة</span>', void: '<span class="pill no">ملغاة</span>' };
+  $('vtable').innerHTML = `<tr><th>مرسلة إلى</th><th>الهاتف</th><th>الحالة</th><th>البطاقة</th><th></th></tr>` + (INV.length ? INV.slice().reverse().map(v => `
+    <tr data-t="${esc(v.token)}"><td><strong>${esc(v.label)}</strong></td><td dir="ltr" class="small">${esc(v.phone) || '—'}</td>
+      <td>${ST[v.status]}${v.used_at ? `<br><span class="muted small">${esc(v.used_at)}</span>` : ''}</td><td class="en small muted">${esc(v.badge) || '—'}</td>
+      <td class="actions">${v.status === 'open' ? `${v.wa ? `<a class="btn sm wa" href="${esc(v.wa)}" target="_blank" rel="noopener">واتساب</a>` : ''}
+        <button class="btn sm ghost" data-copy="${esc(v.link)}">نسخ الرابط</button><button class="btn sm danger" data-void>إلغاء</button>` : ''}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="empty">ما فيش دعوات VIP لهذا الحدث</td></tr>');
+}
+$('vtable').addEventListener('click', async e => {
+  const c = e.target.closest('[data-copy]'); if (c) return copy(c.dataset.copy);
+  const v = e.target.closest('[data-void]'); if (!v || !confirm('إلغاء الدعوة؟ الرابط يتوقف.')) return;
+  const d = await call({ a: 'vip_void', t: v.closest('[data-t]').dataset.t });
+  if (d.ok) { toast('تم الإلغاء'); loadVip(); } else toast(d.msg || 'ما تمش');
+});
+$('vipgo').onclick = async () => {
+  const items = $('vipin').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const parts = l.split(/[,،\t]/).map(x => x.trim()); return { label: parts[0], phone: parts[1] || '' };
+  });
+  if (!items.length) return;
+  $('vipgo').disabled = true; $('vipmsg').textContent = 'جاري الإنشاء…';
+  const d = await call({ a: 'vip_new', event: ev().code, items });
+  const okN = (d.results || []).filter(r => r.ok).length;
+  $('vipmsg').textContent = `تم إنشاء ${okN} دعوة.`; $('vipin').value = ''; $('vipgo').disabled = false; loadVip();
+};
+
+// ---------- tabs & init
+document.querySelector('.tabs').addEventListener('click', e => {
+  const b = e.target.closest('[data-tab]'); if (!b) return;
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+});
+$('ev').onchange = loadEvent;
+$('copypub').onclick = () => copy($('publink').textContent);
+setInterval(() => { if (S && !$('main').hidden && document.visibilityState === 'visible') loadRegs(); }, 45000);
+if (!API.configured()) { $('lerr').textContent = 'الموقع غير مربوط بالشيت بعد (config.js).'; $('lerr').hidden = false; }
+else if (S) start().catch(() => {});
+</script>
+</body></html>
