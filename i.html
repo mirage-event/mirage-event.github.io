@@ -24,7 +24,7 @@ let D = null;
 
 function msg(title, text){ app.innerHTML = `<div class="panel" style="text-align:center"><h1>${esc(title)}</h1><p class="desc">${esc(text)}</p><p class="note en">www.almirage.ly</p></div>`; }
 
-function evLine(ev){ return `${esc(fmtAr(ev.date))}${ev.time ? ' — ' + esc(ev.time) : ''}${ev.venue_ar ? ' · ' + esc(ev.venue_ar) : ''}`; }
+function evLine(ev, type){ return `${esc(fmtAr(ev.date))} · ${esc(typeTimesText(ev, type))}${ev.venue_ar ? ' · ' + esc(ev.venue_ar) : ''}`; }
 
 function saveBox(){
   return `<div class="savebox">احفظ هذا الرابط — منه تتابع حالة طلبك وتستلم بطاقة الدخول:
@@ -41,7 +41,7 @@ function pendingView(){
     <div class="state-icon pending">⏳</div>
     <h1>طلبك قيد المراجعة</h1>
     <p class="desc" style="margin-bottom:6px">شكراً ${esc(r.name)}، تم استلام تسجيلكم في <b>${esc(ev.name_ar)}</b>.<br>سيتم إشعاركم فور اعتماد الطلب، وتظهر بطاقة الدخول في هذه الصفحة.</p>
-    <p class="note" style="margin:0 0 4px">${evLine(ev)}</p>
+    <p class="note" style="margin:0 0 4px">${evLine(ev, r.type)}</p>
     ${saveBox()}
     <p class="note" style="margin:10px 0 0">إذا أدخلتم بريداً إلكترونياً، تصلكم البطاقة عليه أيضاً — يُرجى التحقق من مجلد الرسائل غير المرغوب فيها (Spam).</p>
     <button class="link" id="refresh">تحديث الحالة</button>
@@ -65,7 +65,7 @@ function declinedView(){
 }
 
 function badgeView(){
-  const { event: ev, reg: g } = D, vip = g.type === 'vip', map = safeUrl(ev.map_url);
+  const { event: ev, reg: g } = D, look = TYPE_LOOK[g.type] || TYPE_LOOK.public, map = safeUrl(ev.map_url);
   const role = [g.title, g.org].filter(Boolean).join(' · ');
   app.innerHTML = `
     <p class="confirmed">✓ ${g.attend === 'maybe' ? 'بطاقة دخولكم جاهزة — نأمل تأكيد حضوركم' : 'هذه بطاقة دخولكم'}</p>
@@ -77,14 +77,14 @@ function badgeView(){
         </div>
         <div class="b-person"><div class="b-name">${esc(g.name)}</div>${role ? `<div class="b-role">${esc(role)}</div>` : ''}</div>
       </div>
-      <div class="b-cat" style="background:${vip ? '#e6c36a' : '#1cc8ee'}"><span class="ar">${vip ? 'كبار الضيوف' : 'ضيف'}</span><span class="en">${vip ? 'VIP' : 'GUEST'}</span></div>
+      <div class="b-cat" style="background:${look.color}"><span class="ar">${look.ar}</span><span class="en">${look.en}</span></div>
       <div class="b-mid"><div class="b-qr" id="qr"></div>
         <div class="b-id"><div class="l">رقم البطاقة</div><div class="v">${esc(g.badge)}</div>
           <div class="s">يُرجى إبراز الرمز عند البوابة.<br>بطاقة شخصية غير قابلة للتحويل.</div></div></div>
       <div class="b-bot">
         <div><div class="l">التاريخ</div><div class="v">${esc(fmtAr(ev.date))}</div><div class="ven">${esc(fmtEn(ev.date))}</div></div>
         <div><div class="l">المكان</div><div class="v">${esc(ev.venue_ar || '—')}</div><div class="ven">${esc((ev.venue_en || '').toUpperCase())}</div></div>
-        ${ev.time ? `<div><div class="l">الوقت</div><div class="v">${esc(ev.time)}</div></div>` : ''}
+        ${typeSessions(ev, g.type).map(x => `<div><div class="l">${esc(x.label)}</div><div class="v">${esc(x.time || '—')}</div></div>`).join('')}
       </div>
       <div class="b-foot"><span>WWW.ALMIRAGE.LY</span><span>AL MIRAGE DEVELOPMENTS</span></div>
     </div>

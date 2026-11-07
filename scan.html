@@ -18,6 +18,10 @@
   #result.already{border-color:var(--warn);background:#3a2e0c}
   #result.bad{border-color:var(--bad);background:#3a1212}
   #result.wait{opacity:.7}
+  .sessbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-4px 0 16px}
+  .sess{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .sess button{background:transparent;border:0;color:var(--mute);font:inherit;font-weight:700;padding:10px 18px;cursor:pointer}
+  .sess button.on{background:var(--cyan);color:#022}
   .count{font-size:44px;font-weight:700;color:var(--cyan);font-variant-numeric:tabular-nums;line-height:1}
 </style>
 </head><body>
@@ -45,6 +49,11 @@
   <div class="toolbar">
     <h1 style="margin:0">ماسح البوابة</h1>
     <select id="ev" style="max-width:320px;margin-inline-start:auto"></select>
+  </div>
+  <div class="sessbar">
+    <span class="muted small">الفترة الحالية</span>
+    <div class="sess" id="sess"><button type="button" data-s="am">الصباحية · VIP</button><button type="button" data-s="pm">المسائية · ضيوف</button></div>
+    <span class="muted small">الإعلام مسموح في الفترتين</span>
   </div>
   <div class="scan-grid">
     <div>
@@ -76,6 +85,15 @@
 const $ = id => document.getElementById(id);
 let S = store.get('mrg_scan_s'), scanner = null, last = '', lastAt = 0, busy = false;
 const res = $('result'), evSel = $('ev');
+// Session defaults from the clock (before 14:00 → morning) so staff don't have to remember to switch.
+let SESS = store.get('mrg_sess_day') === new Date().toDateString() && store.get('mrg_sess') || (new Date().getHours() < 14 ? 'am' : 'pm');
+function paintSess(){ document.querySelectorAll('#sess button').forEach(b => b.classList.toggle('on', b.dataset.s === SESS)); }
+document.getElementById('sess').addEventListener('click', e => {
+  const b = e.target.closest('[data-s]'); if (!b || b.dataset.s === SESS) return;
+  SESS = b.dataset.s; store.set('mrg_sess', SESS); store.set('mrg_sess_day', new Date().toDateString());
+  paintSess(); last = ''; res.className = ''; res.innerHTML = '<div class="muted">وجّه الكاميرا على QR البادج</div>'; refresh();
+});
+paintSess();
 
 async function enter(){
   const d = await API.post({ a: 'events', s: S });
@@ -83,6 +101,7 @@ async function enter(){
   const saved = store.get('mrg_event');
   evSel.innerHTML = d.events.map(e => `<option value="${esc(e.code)}">${esc(e.name_ar)} — ${esc(fmtAr(e.date))}</option>`).join('');
   if (saved && d.events.some(e => e.code === saved)) evSel.value = saved;
+  evSel.hidden = d.events.length < 2;   // one event → nothing for staff to pick
   $('gate').hidden = true; $('main').hidden = false; $('logout').hidden = false; $('who').textContent = store.get('mrg_scan_n') || '';
   refresh(); return true;
 }
@@ -109,7 +128,7 @@ async function check(code){
   busy = true; last = code; lastAt = now;
   res.className = 'wait'; res.innerHTML = '<div class="muted">جاري التحقق…</div>';
   try {
-    const d = await API.post({ a: 'checkin', s: S, code, event: evSel.value });
+    const d = await API.post({ a: 'checkin', s: S, code, event: evSel.value, session: SESS });
     if (d.error === 'auth') { store.set('mrg_scan_s', null); location.reload(); return; }
     show(d);
   } catch (e) { show({ status: 'bad', msg: 'مشكلة اتصال — جرّب مرة ثانية' }); last = ''; }
@@ -122,13 +141,13 @@ function show(d){
   res.className = cls;
   res.innerHTML = `<div style="font-size:42px;line-height:1">${icon}</div><div class="big">${esc(d.msg || 'خطأ')}</div>`
     + (g ? `<div class="name">${esc(g.name)}</div><div class="muted">${esc([g.title, g.org].filter(Boolean).join(' · '))}</div>
-            <div style="margin-top:10px"><span class="pill cat" style="${g.type === 'vip' ? 'background:#e6c36a;color:#2a2005;border-color:#e6c36a' : ''}">${g.type === 'vip' ? 'VIP' : 'GUEST'}</span> <span class="muted small en">${esc(g.badge)}</span></div>` : '');
+            <div style="margin-top:10px"><span class="pill cat" style="background:${(TYPE_LOOK[g.type]||TYPE_LOOK.public).color};color:#03141c;border-color:transparent">${(TYPE_LOOK[g.type]||TYPE_LOOK.public).en}</span> <span class="muted small en">${esc(g.badge)}</span></div>` : '');
   beep(cls === 'ok');
 }
 
 async function refresh(){
   if (!S || !evSel.value) return;
-  try { const d = await API.post({ a: 'stats', s: S, event: evSel.value });
+  try { const d = await API.post({ a: 'stats', s: S, event: evSel.value, session: SESS });
     if (d.ok) { $('inside').textContent = d.counts.in; $('yes').textContent = d.counts.approved; } } catch(e){}
 }
 

@@ -20,6 +20,7 @@
   .req .meta{display:flex;flex-wrap:wrap;gap:4px 14px}
   .done{color:var(--ok);font-size:13px;font-weight:600}
   .pill.vip{color:#2a2005;background:#e6c36a;border-color:#e6c36a}
+  .pill.press{color:#3a1405;background:#ff9a6b;border-color:#ff9a6b}
   .pill.pend{color:var(--warn);border-color:#5a4a1f}
   textarea{min-height:110px}
   .empty{color:var(--mute);text-align:center;padding:30px 0}
@@ -53,16 +54,21 @@
 
   <div class="stats">
     <div class="stat"><div class="n" data-k="total">—</div><div class="l">كل التسجيلات</div></div>
-    <div class="stat"><div class="n" data-k="vip">—</div><div class="l">VIP</div></div>
+    <div class="stat"><div class="n" data-k="vip">—</div><div class="l">VIP · صباحية</div></div>
+    <div class="stat"><div class="n" data-k="public">—</div><div class="l">ضيوف · مسائية</div></div>
+    <div class="stat"><div class="n" data-k="press">—</div><div class="l">إعلام · الفترتين</div></div>
     <div class="stat" style="border-color:#5a4a1f"><div class="n" data-k="pending" style="color:var(--warn)">—</div><div class="l">بانتظار الموافقة</div></div>
     <div class="stat"><div class="n" data-k="approved">—</div><div class="l">معتمد</div></div>
     <div class="stat"><div class="n" data-k="rejected">—</div><div class="l">مرفوض</div></div>
-    <div class="stat hi"><div class="n" data-k="in">—</div><div class="l">حضروا</div></div>
+    <div class="stat hi"><div class="n" data-k="in_am">—</div><div class="l">حضروا الصباحية</div></div>
+    <div class="stat hi"><div class="n" data-k="in_pm">—</div><div class="l">حضروا المسائية</div></div>
   </div>
 
   <div class="card" style="margin-bottom:20px">
-    <div class="muted small" style="margin-bottom:8px">رابط التسجيل العام <span id="openflag"></span></div>
+    <div class="muted small" style="margin-bottom:8px">رابط تسجيل الضيوف — الفترة المسائية <span id="openflag"></span></div>
     <div class="linkbox"><code id="publink"></code><button class="btn sm ghost" id="copypub">نسخ</button><a class="btn sm ghost" id="openpub" target="_blank" rel="noopener">فتح</a></div>
+    <div class="muted small" style="margin:14px 0 8px">رابط تسجيل الإعلاميين — الفترتين <span id="pressflag"></span></div>
+    <div class="linkbox"><code id="presslink"></code><button class="btn sm ghost" id="copypress">نسخ</button><a class="btn sm ghost" id="openpress" target="_blank" rel="noopener">فتح</a></div>
   </div>
 
   <div class="tabs">
@@ -77,7 +83,7 @@
     <div class="toolbar">
       <input id="q" placeholder="بحث بالاسم أو الهاتف أو الجهة أو رقم البطاقة…" style="max-width:320px">
       <select id="fst" style="max-width:170px"><option value="">كل الحالات</option><option value="pending">قيد المراجعة</option><option value="approved">معتمد</option><option value="rejected">مرفوض</option><option value="in">حضروا</option></select>
-      <select id="fty" style="max-width:140px"><option value="">كل الأنواع</option><option value="vip">VIP</option><option value="public">عام</option></select>
+      <select id="fty" style="max-width:140px"><option value="">كل الأنواع</option><option value="vip">VIP</option><option value="public">ضيوف</option><option value="press">إعلام</option></select>
       <button class="btn sm ghost" id="csv" style="margin-inline-start:auto">تصدير CSV</button>
     </div>
     <div class="tablewrap"><table id="atable"></table></div>
@@ -128,6 +134,7 @@ async function start(){
   EVENTS = d.events;
   $('ev').innerHTML = EVENTS.map(e => `<option value="${esc(e.code)}">${esc(e.name_ar)} — ${esc(fmtAr(e.date))}</option>`).join('');
   const saved = store.get('mrg_admin_ev'); if (saved && EVENTS.some(e => e.code === saved)) $('ev').value = saved;
+  $('ev').hidden = EVENTS.length < 2;
   $('gate').hidden = true; $('main').hidden = false; $('logout').hidden = false; $('who').textContent = store.get('mrg_admin_n') || '';
   loadEvent();
 }
@@ -136,10 +143,12 @@ async function start(){
 async function loadEvent(){
   const e = ev(); store.set('mrg_admin_ev', e.code);
   $('evname').textContent = e.name_ar || '—';
-  $('evline').textContent = [fmtAr(e.date), e.time, e.venue_ar, e.code].filter(Boolean).join(' · ');
+  $('evline').textContent = [fmtAr(e.date), e.time && 'الصباحية (VIP) ' + e.time, e.time_pm && 'المسائية (الضيوف) ' + e.time_pm, e.venue_ar, e.code].filter(Boolean).join(' · ');
   const pub = siteBase() + 'r.html?e=' + encodeURIComponent(e.code);
   $('publink').textContent = pub; $('openpub').href = pub;
   $('openflag').innerHTML = e.public_open ? '<span class="pill ok">مفتوح</span>' : '<span class="pill no">مغلق — غيّره من تاب الأحداث في الشيت</span>';
+  const prs = pub + '&k=press'; $('presslink').textContent = prs; $('openpress').href = prs;
+  $('pressflag').innerHTML = e.press_open ? '<span class="pill ok">مفتوح</span>' : '<span class="pill no">مغلق — غيّره من تاب الأحداث في الشيت</span>';
   await Promise.all([loadRegs(), loadVip()]);
 }
 async function loadRegs(){
@@ -148,18 +157,21 @@ async function loadRegs(){
 }
 function renderStats(){
   const c = { total: REGS.length, vip: 0, pending: 0, approved: 0, rejected: 0, in: 0 };
-  REGS.forEach(r => { if (r.type === 'vip') c.vip++; c[r.status]++; if (r.checked_in) c.in++; });
+  c.public = 0; c.press = 0; c.in_am = 0; c.in_pm = 0;
+  REGS.forEach(r => { c[r.type]++; c[r.status]++; if (r.checkin_at) c.in_am++; if (r.checkin2_at) c.in_pm++; });
   for (const k in c) { const el = document.querySelector(`[data-k="${k}"]`); if (el) el.textContent = c[k]; }
   $('pcnt').textContent = c.pending;
 }
 
 const ATT_AR = { yes: 'أؤكد حضوري', no: 'لن أحضر', maybe: 'غير متأكد' };
+const TYPE_AR = { vip: 'VIP', public: 'ضيف', press: 'إعلام' };
+function typePill(t){ return t === 'vip' ? '<span class="pill vip">VIP</span>' : t === 'press' ? '<span class="pill press">إعلام</span>' : '<span class="pill">ضيف</span>'; }
 const ST_AR = { pending: 'قيد المراجعة', approved: 'معتمد', rejected: 'مرفوض' };
 function badgeLink(r){ return siteBase() + 'i.html?t=' + r.token; }
 function waPhone(p){ let d = String(p || '').replace(/\D+/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('0')) d = '218' + d.slice(1); if (d.length === 9) d = '218' + d; return d; }
 function waBadge(r){
   const e = ev(), p = waPhone(r.phone); if (!p) return '';
-  const t = `السيد/ة ${r.name}،\n\nتم اعتماد تسجيلكم في: ${e.name_ar}\n📅 ${fmtAr(e.date)}${e.time ? ' — ' + e.time : ''}${e.venue_ar ? '\n📍 ' + e.venue_ar : ''}\n\nبطاقة الدخول الخاصة بكم (QR):\n${badgeLink(r)}\n\nيرجى إبراز البطاقة عند البوابة. البطاقة شخصية وغير قابلة للتحويل.`;
+  const t = `السيد/ة ${r.name}،\n\nتم اعتماد تسجيلكم في: ${e.name_ar}\n📅 ${fmtAr(e.date)}\n🕚 ${typeTimesText(e, r.type)}${e.venue_ar ? '\n📍 ' + e.venue_ar : ''}\n\nبطاقة الدخول الخاصة بكم (QR):\n${badgeLink(r)}\n\nيرجى إبراز البطاقة عند البوابة. البطاقة شخصية وغير قابلة للتحويل.`;
   return 'https://wa.me/' + p + '?text=' + encodeURIComponent(t);
 }
 
@@ -168,7 +180,7 @@ function renderPending(){
   const list = REGS.filter(r => r.status === 'pending').sort((a, b) => a.created.localeCompare(b.created));
   $('plist').innerHTML = list.length ? list.map(r => `
     <div class="req" data-t="${esc(r.token)}">
-      <div class="who"><strong>${esc(r.name)}</strong> <span class="pill">${esc(r.gender)}</span>
+      <div class="who"><strong>${esc(r.name)}</strong> ${typePill(r.type)} <span class="pill">${esc(r.gender)}</span>
         <div class="meta"><span>${esc(r.title)} · ${esc(r.org)}</span></div>
         <div class="meta"><span dir="ltr">${esc(r.phone)}</span>${r.email ? `<span dir="ltr">${esc(r.email)}</span>` : ''}<span>${esc(ATT_AR[r.attend])}</span><span>${esc(r.created)}</span></div></div>
       <div class="actions"><button class="btn" data-d="approve">موافقة</button><button class="btn danger" data-d="reject">رفض</button></div>
@@ -199,10 +211,10 @@ function renderAll(){
     <tr data-t="${esc(r.token)}">
       <td class="en small muted">${esc(r.badge)}</td>
       <td><strong>${esc(r.name)}</strong><br><span class="muted small">${esc(r.title)} · ${esc(r.org)} · <span dir="ltr">${esc(r.phone)}</span></span></td>
-      <td>${r.type === 'vip' ? '<span class="pill vip">VIP</span>' : '<span class="pill">عام</span>'}</td>
+      <td>${typePill(r.type)}</td>
       <td><span class="pill ${r.status === 'approved' ? 'ok' : r.status === 'rejected' ? 'no' : 'pend'}">${ST_AR[r.status]}</span></td>
       <td class="small">${esc(ATT_AR[r.attend])}</td>
-      <td>${r.checked_in ? `<span class="pill in">${esc(r.checkin_at.slice(11))}</span><br><span class="muted small">${esc(r.checkin_by)}</span>` : '<span class="muted">—</span>'}</td>
+      <td>${r.checked_in ? [['ص', r.checkin_at, r.checkin_by], ['م', r.checkin2_at, r.checkin2_by]].filter(x => x[1]).map(x => `<span class="pill in">${x[0]} ${esc(x[1].slice(11))}</span> <span class="muted small">${esc(x[2])}</span>`).join('<br>') : '<span class="muted">—</span>'}</td>
       <td class="actions">
         ${r.status === 'approved' ? `<a class="btn sm ghost" href="${esc(badgeLink(r))}" target="_blank" rel="noopener">البادج</a>${waBadge(r) ? `<a class="btn sm wa" href="${esc(waBadge(r))}" target="_blank" rel="noopener">واتساب</a>` : ''}` : ''}
         ${r.status !== 'approved' ? '<button class="btn sm ghost" data-d="approve">موافقة</button>' : ''}
@@ -218,8 +230,8 @@ $('atable').addEventListener('click', async e => {
   if (d.ok) { const i = REGS.findIndex(r => r.token === d.reg.token); REGS[i] = d.reg; renderStats(); renderPending(); renderAll(); toast(d.emailed ? 'تم — وانبعت إيميل' : 'تم'); }
 });
 $('csv').onclick = () => {
-  const head = ['رقم البطاقة','النوع','الحالة','الاسم','الهاتف','الإيميل','المسمى','الجهة','الجنس','تأكيد الحضور','وقت التسجيل','القرار بواسطة','وقت الدخول','دخل بواسطة','رابط البطاقة'];
-  const lines = filtered().map(r => [r.badge, r.type === 'vip' ? 'VIP' : 'عام', ST_AR[r.status], r.name, r.phone, r.email, r.title, r.org, r.gender, ATT_AR[r.attend], r.created, r.decided_by, r.checkin_at, r.checkin_by, badgeLink(r)]);
+  const head = ['رقم البطاقة','النوع','الحالة','الاسم','الهاتف','الإيميل','المسمى','الجهة','الجنس','تأكيد الحضور','وقت التسجيل','القرار بواسطة','دخول الصباحية','بواسطة','دخول المسائية','بواسطة','رابط البطاقة'];
+  const lines = filtered().map(r => [r.badge, TYPE_AR[r.type], ST_AR[r.status], r.name, r.phone, r.email, r.title, r.org, r.gender, ATT_AR[r.attend], r.created, r.decided_by, r.checkin_at, r.checkin_by, r.checkin2_at, r.checkin2_by, badgeLink(r)]);
   const csv = '﻿' + [head, ...lines].map(l => l.map(v => '"' + String(v ?? '').replace(/"/g, '""') + '"').join(',')).join('\r\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = ev().code + '-registrations.csv'; a.click();
 };
@@ -260,6 +272,7 @@ document.querySelector('.tabs').addEventListener('click', e => {
 });
 $('ev').onchange = loadEvent;
 $('copypub').onclick = () => copy($('publink').textContent);
+$('copypress').onclick = () => copy($('presslink').textContent);
 setInterval(() => { if (S && !$('main').hidden && document.visibilityState === 'visible') loadRegs(); }, 45000);
 if (!API.configured()) { $('lerr').textContent = 'الموقع غير مربوط بالشيت بعد (config.js).'; $('lerr').hidden = false; }
 else if (S) start().catch(() => {});

@@ -17,7 +17,7 @@
 <script>
 const app = document.getElementById('app');
 const qs = new URLSearchParams(location.search);
-const VIP = (qs.get('v') || '').toLowerCase(), EV = (qs.get('e') || '').toUpperCase();
+const VIP = (qs.get('v') || '').toLowerCase(), EV = (qs.get('e') || '').toUpperCase(), KIND = qs.get('k') === 'press' ? 'press' : '';
 const I = {
   user: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
   phone:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2z"/></svg>',
@@ -35,28 +35,30 @@ function msg(title, text){
 function goBadge(token){ location.replace('i.html?t=' + encodeURIComponent(token)); }
 
 function render(ctx){
-  const ev = ctx.event, isVip = ctx.type === 'vip', map = safeUrl(ev.map_url);
+  const ev = ctx.event, isVip = ctx.type === 'vip', isPress = ctx.type === 'press', map = safeUrl(ev.map_url);
   document.title = ev.name_ar + ' · التسجيل';
   app.innerHTML = `<div class="reg">
     <section class="reg-info">
-      ${isVip ? '<div class="vip-tag">دعوة خاصة <span class="en">VIP</span></div>' : '<p class="kicker">التسجيل في الحدث · Registration</p>'}
+      ${isVip ? '<div class="vip-tag">دعوة خاصة <span class="en">VIP</span></div>'
+        : isPress ? '<div class="vip-tag" style="background:linear-gradient(90deg,#ff9a6b,#ffc2a3);color:#3a1405">تسجيل الإعلاميين <span class="en">PRESS</span></div>'
+        : '<p class="kicker">التسجيل في الحدث · Registration</p>'}
       <h1>${esc(ev.name_ar)}</h1>${ev.name_en ? `<p class="h1en en">${esc(ev.name_en)}</p>` : ''}
       <p class="desc">${esc(ev.description || '')}</p>
       <div class="facts">
-        <div class="fact">${I.cal}<div><b>${esc(fmtAr(ev.date))}${ev.time ? ' — ' + esc(ev.time) : ''}</b><span class="en">${esc(fmtEn(ev.date))}</span></div></div>
+        <div class="fact">${I.cal}<div><b>${esc(fmtAr(ev.date))}</b>${typeSessions(ev, ctx.type).map(x => `<span style="display:block;color:#eaf7fb">${esc(x.label)}${x.time ? ' — ' + esc(x.time) : ''}</span>`).join('')}<span class="en">${esc(fmtEn(ev.date))}</span></div></div>
         ${ev.venue_ar ? `<div class="fact">${I.pin}<div><b>${esc(ev.venue_ar)}</b><span class="en">${esc(ev.venue_en)}</span>
           ${map ? `<a href="${esc(map)}" target="_blank" rel="noopener">فتح الموقع على الخريطة ←</a>` : ''}</div></div>` : ''}
       </div>
     </section>
     <form class="panel form" id="f" novalidate>
       <h2>سجّل حضورك الآن</h2>
-      <p class="sub">${isVip ? 'املأ النموذج لاستلام بطاقة الدخول فوراً' : 'املأ النموذج — يُراجع طلبك ثم تصلك بطاقة الدخول'}</p>
+      <p class="sub">${isVip ? 'املأ النموذج لاستلام بطاقة الدخول فوراً' : isPress ? 'بطاقة الإعلام صالحة للفترتين — يُراجع طلبك ثم تصلك البطاقة' : 'املأ النموذج — يُراجع طلبك ثم تصلك بطاقة الدخول'}</p>
       <div class="formerr" id="err" hidden></div>
       <div class="field" data-k="name">${I.user}<input name="name" placeholder="الاسم الكامل" autocomplete="name" maxlength="120"></div>
       <div class="field" data-k="phone">${I.phone}<input name="phone" type="tel" inputmode="tel" placeholder="رقم الهاتف (091xxxxxxx)" autocomplete="tel" maxlength="20" dir="rtl"></div>
       <div class="field" data-k="email">${I.mail}<input name="email" type="email" placeholder="البريد الإلكتروني (اختياري)" autocomplete="email" maxlength="120"></div>
       <div class="field" data-k="title">${I.bag}<input name="title" placeholder="المسمى الوظيفي" autocomplete="organization-title" maxlength="120"></div>
-      <div class="field" data-k="org">${I.org}<input name="org" placeholder="جهة العمل" autocomplete="organization" maxlength="120"></div>
+      <div class="field" data-k="org">${I.org}<input name="org" placeholder="${isPress ? 'الوسيلة الإعلامية' : 'جهة العمل'}" autocomplete="organization" maxlength="120"></div>
       <input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
       <div class="group" data-k="gender"><label>الجنس</label>
         <div class="seg two" data-g="gender"><button type="button" data-v="m" aria-pressed="false">ذكر</button><button type="button" data-v="f" aria-pressed="false">أنثى</button></div></div>
@@ -104,12 +106,12 @@ async function submit(e){
   err.hidden = true; go.disabled = true; go.textContent = 'جاري التسجيل…';
   const body = { a: 'register', hp: v.website || '', f: { name: v.name, phone: v.phone, email: v.email, title: v.title, org: v.org,
                  gender: state.gender, attend: state.attend, consent: true } };
-  if (VIP) body.v = VIP; else body.e = EV;
+  if (VIP) body.v = VIP; else { body.e = EV; if (KIND) body.k = KIND; }
   try {
     const d = await API.post(body);
     if (d.ok && d.token) { store.set('mrg_last_' + (VIP || EV), d.token); return goBadge(d.token); }
     err.textContent = d.error === 'fields' ? 'تحقق من: ' + d.fields.join('، ')
-      : d.error === 'closed' ? 'التسجيل مغلق لهذا الحدث.'
+      : d.error === 'closed' ? 'التسجيل مغلق حالياً.'
       : d.error === 'busy' ? d.msg : 'تعذّر التسجيل. حاول مرة أخرى.';
     err.hidden = false;
   } catch (_) { err.textContent = 'مشكلة في الاتصال. تأكد من الإنترنت وحاول مرة أخرى.'; err.hidden = false; }
@@ -121,11 +123,11 @@ async function submit(e){
   if (!VIP && !EV) return msg('الرابط غير مكتمل', 'تأكد من الرابط المُرسل إليك.');
   if (VIP && !/^[a-f0-9]{32}$/.test(VIP)) return msg('رابط الدعوة غير صالح', 'تأكد من الرابط المُرسل إليك أو تواصل مع فريق التنظيم.');
   try {
-    const d = await API.get(VIP ? { a: 'form', v: VIP } : { a: 'form', e: EV });
+    const d = await API.get(VIP ? { a: 'form', v: VIP } : Object.assign({ a: 'form', e: EV }, KIND ? { k: KIND } : {}));
     if (d.ok && d.used) return d.token ? goBadge(d.token) : msg('الدعوة مستخدمة', 'تم التسجيل بهذه الدعوة مسبقاً.');
     if (d.ok) return render(d);
     if (d.error === 'void') return msg('الدعوة ملغاة', 'هذه الدعوة لم تعد صالحة. تواصل مع فريق التنظيم.');
-    if (d.error === 'closed') return msg('التسجيل مغلق', 'التسجيل العام لهذا الحدث مغلق حالياً.');
+    if (d.error === 'closed') return msg('التسجيل مغلق', KIND ? 'تسجيل الإعلاميين مغلق حالياً.' : 'التسجيل العام مغلق حالياً.');
     msg('الرابط غير صالح', 'تأكد من الرابط المُرسل إليك أو تواصل مع فريق التنظيم.');
   } catch (_) { msg('تعذّر التحميل', 'تأكد من اتصالك بالإنترنت ثم أعد فتح الرابط.'); }
 })();
