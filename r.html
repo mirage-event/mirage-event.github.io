@@ -28,6 +28,7 @@ const I = {
   pin:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>',
 };
 const state = { gender: '', attend: '' };
+let T0 = Date.now();
 
 function msg(title, text){
   app.innerHTML = `<div class="panel" style="text-align:center"><h1>${esc(title)}</h1><p class="desc">${esc(text)}</p><p class="note en">www.almirage.ly</p></div>`;
@@ -69,6 +70,7 @@ function render(ctx){
       <p class="note">${isVip ? 'رابط الدعوة شخصي ويُستخدم مرة واحدة' : 'بعد التسجيل ستحصل على رابط لمتابعة حالة طلبك'}</p>
     </form></div>`;
 
+  T0 = Date.now();
   app.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
@@ -104,17 +106,24 @@ async function submit(e){
     f.querySelector('.err')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return;
   }
   err.hidden = true; go.disabled = true; go.textContent = 'جاري التسجيل…';
-  const body = { a: 'register', hp: v.website || '', f: { name: v.name, phone: v.phone, email: v.email, title: v.title, org: v.org,
+  const body = { a: 'register', hp: v.website || '', el: Date.now() - T0, f: { name: v.name, phone: v.phone, email: v.email, title: v.title, org: v.org,
                  gender: state.gender, attend: state.attend, consent: true } };
   if (VIP) body.v = VIP; else { body.e = EV; if (KIND) body.k = KIND; }
-  try {
-    const d = await API.post(body);
-    if (d.ok && d.token) { store.set('mrg_last_' + (VIP || EV), d.token); return goBadge(d.token); }
-    err.textContent = d.error === 'fields' ? 'تحقق من: ' + d.fields.join('، ')
-      : d.error === 'closed' ? 'التسجيل مغلق حالياً.'
-      : d.error === 'busy' ? d.msg : 'تعذّر التسجيل. حاول مرة أخرى.';
-    err.hidden = false;
-  } catch (_) { err.textContent = 'مشكلة في الاتصال. تأكد من الإنترنت وحاول مرة أخرى.'; err.hidden = false; }
+  // Retry quietly: registration is idempotent by phone number, so a second try never creates a duplicate.
+  let d = null;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try { d = await API.post(body); } catch (_) { d = { ok: false, error: 'network' }; }
+    if (d.ok || !['server', 'network'].includes(d.error)) break;
+    go.textContent = 'جاري التسجيل… لحظة من فضلك';
+    await new Promise(r => setTimeout(r, 2500 * attempt));
+  }
+  if (d.ok && d.token) { store.set('mrg_last_' + (VIP || EV), d.token); return goBadge(d.token); }
+  err.textContent = d.error === 'fields' ? 'تحقق من: ' + d.fields.join('، ')
+    : d.error === 'closed' ? 'التسجيل مغلق حالياً.'
+    : d.error === 'busy' ? d.msg
+    : d.error === 'network' ? 'مشكلة في الاتصال. تأكد من الإنترنت وحاول مرة أخرى.'
+    : 'تعذّر التسجيل. حاول بعد دقيقة. (رمز: ' + (d.error || '?') + ')';
+  err.hidden = false;
   go.disabled = false; go.textContent = 'تسجيل الحضور';
 }
 
