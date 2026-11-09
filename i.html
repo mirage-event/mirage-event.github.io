@@ -95,7 +95,7 @@ function badgeView(){
       ${g.attend === 'maybe' ? '<button class="ghost" data-att="yes">أؤكد حضوري</button>' : ''}
       <button class="link" data-att="no">لن أتمكن من الحضور</button>
     </div>`;
-  drawQR(myUrl());
+  drawQR('MIRAGE:' + g.gate);   // not a link: only the gate scanner understands it
   if (SAMSUNG) flatten();
   document.getElementById('dl').onclick = async () => {
     const shown = document.getElementById('badgeImg');
