@@ -84,6 +84,7 @@
     <button data-tab="all">كل المسجلين</button>
     <button data-tab="vip">دعوات VIP</button>
     <button data-tab="rpt">التقارير والتصدير</button>
+    <button data-tab="acc">الحسابات</button>
   </div>
 
   <section class="card" data-pane="pending"><div id="plist"></div></section>
@@ -160,6 +161,23 @@
       <p class="muted small" id="crmbad" style="margin-top:10px"></p>
     </div>
   </section>
+
+  <section data-pane="acc" hidden>
+    <form class="card" id="mypass" style="margin-bottom:16px;max-width:520px" autocomplete="off">
+      <h2>كلمة سري</h2>
+      <div class="flash err" id="mperr" hidden></div>
+      <label for="mpold">كلمة السر الحالية</label><input id="mpold" type="password" autocomplete="current-password" required style="margin-bottom:12px">
+      <label for="mpnew">كلمة السر الجديدة (10 خانات على الأقل)</label><input id="mpnew" type="password" autocomplete="new-password" minlength="10" required style="margin-bottom:12px">
+      <label for="mpnew2">تأكيد كلمة السر الجديدة</label><input id="mpnew2" type="password" autocomplete="new-password" required>
+      <p class="muted small">بعد التغيير تُنهى كل جلساتك المفتوحة على الأجهزة الأخرى، وتبقى داخلاً على هذا الجهاز.</p>
+      <button class="btn" id="mpgo">تغيير كلمة السر</button>
+    </form>
+    <div class="card">
+      <h2>حسابات الفريق</h2>
+      <p class="muted small">تعيين كلمة سر جديدة لموظف يُخرجه فوراً من كل الأجهزة. سلّمه الكلمة الجديدة شخصياً — لا تُرسل في المجموعات.</p>
+      <div class="tablewrap"><table id="utable"></table></div>
+    </div>
+  </section>
 </main>
 <div id="toast" hidden></div>
 
@@ -186,7 +204,7 @@ $('loginf').onsubmit = async e => {
     const d = await API.post({ a: 'login', user: $('u').value, pass: $('p').value });
     if (!d.ok) throw new Error(d.msg || 'خطأ');
     if (d.user.role !== 'admin') throw new Error('هذا الحساب لموظف استقبال — استخدم صفحة الماسح.');
-    S = d.session; store.set('mrg_admin_s', S); store.set('mrg_admin_n', d.user.name); start();
+    S = d.session; store.set('mrg_admin_s', S); store.set('mrg_admin_n', d.user.name); store.set('mrg_admin_u', d.user.username); start();
   } catch (err) { $('lerr').textContent = err.message || 'تعذّر الاتصال'; $('lerr').hidden = false; }
   $('lbtn').disabled = false;
 };
@@ -333,8 +351,42 @@ document.querySelector('.tabs').addEventListener('click', e => {
   const b = e.target.closest('[data-tab]'); if (!b) return;
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
   document.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
+  if (b.dataset.tab === 'acc') loadUsers();
 });
 $('ev').onchange = loadEvent;
+
+// ---------- accounts ----------
+$('mypass').addEventListener('input', () => $('mperr').hidden = true);
+$('mypass').onsubmit = async e => {
+  e.preventDefault(); const err = $('mperr'); err.hidden = true;
+  if ($('mpnew').value !== $('mpnew2').value) { err.textContent = 'التأكيد لا يطابق كلمة السر الجديدة.'; err.hidden = false; return; }
+  if ($('mpnew').value.length < 10) { err.textContent = 'كلمة السر الجديدة لازم 10 خانات على الأقل.'; err.hidden = false; return; }
+  $('mpgo').disabled = true;
+  try {
+    const d = await call({ a: 'my_pass', old: $('mpold').value, new: $('mpnew').value });
+    if (!d.ok) throw new Error(d.msg || 'ما تمش');
+    S = d.session; store.set('mrg_admin_s', S); $('mypass').reset(); toast('تم تغيير كلمة السر ✓');
+  } catch (x) { if (x) { err.textContent = x.message || 'تعذّر الاتصال'; err.hidden = false; } }
+  $('mpgo').disabled = false;
+};
+async function loadUsers(){
+  const d = await call({ a: 'users' }); if (!d.ok) return;
+  const me = d.me || '';
+  $('utable').innerHTML = '<tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الحالة</th><th>كلمة سر جديدة</th></tr>' + d.users.map(u => `
+    <tr data-u="${esc(u.username)}"><td class="en small">${esc(u.username)}</td><td>${esc(u.name)}</td>
+      <td>${u.role === 'admin' ? 'أدمن' : 'استقبال'}</td><td>${u.active ? '<span class="pill ok">فعّال</span>' : '<span class="pill no">موقوف</span>'}</td>
+      <td>${u.username === me ? '<span class="muted small">من «كلمة سري»</span>' : `<div style="display:flex;gap:6px"><input type="password" autocomplete="new-password" placeholder="10 خانات على الأقل" style="max-width:190px;padding:6px 10px"><button class="btn sm ghost" data-setp>تعيين</button></div>`}</td></tr>`).join('');
+}
+$('utable').addEventListener('click', async e => {
+  const b = e.target.closest('[data-setp]'); if (!b) return;
+  const tr = b.closest('[data-u]'), inp = tr.querySelector('input'), u = tr.dataset.u;
+  if (inp.value.length < 10) return toast('كلمة السر لازم 10 خانات على الأقل');
+  if (!confirm(`تعيين كلمة سر جديدة لـ ${u}؟ سيخرج من كل الأجهزة فوراً.`)) return;
+  b.disabled = true;
+  const d = await call({ a: 'user_pass', user: u, new: inp.value });
+  b.disabled = false;
+  if (d.ok) { inp.value = ''; toast('تم ✓ — سلّمه الكلمة الجديدة'); } else toast(d.msg || 'ما تمش');
+});
 
 // ---------- reports & export ----------
 const xopts = () => ({ types: [...document.querySelectorAll('#xtypes input:checked')].map(i => i.value), status: $('xstatus').value, session: $('xsess').value });
