@@ -24,6 +24,14 @@
   .pill.pend{color:var(--warn);border-color:#5a4a1f}
   textarea{min-height:110px}
   .empty{color:var(--mute);text-align:center;padding:30px 0}
+  .xgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chips label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:10px;padding:9px 12px;margin:0;color:var(--ink);font-size:14px;cursor:pointer}
+  .chips input{width:auto;margin:0;accent-color:var(--cyan)}
+  .crmrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:10px}
+  .crmbox{border:1px solid var(--line);border-radius:12px;padding:14px}
+  .crmbox p{margin:6px 0 12px}
+  .crmbox.warnb{border-color:#5a4a1f}
   #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--cyan);padding:10px 18px;border-radius:10px;z-index:20}
   @media(max-width:640px){.req{grid-template-columns:1fr}}
 </style>
@@ -75,6 +83,7 @@
     <button data-tab="pending" class="on">الطلبات<span class="cnt" id="pcnt">0</span></button>
     <button data-tab="all">كل المسجلين</button>
     <button data-tab="vip">دعوات VIP</button>
+    <button data-tab="rpt">التقارير والتصدير</button>
   </div>
 
   <section class="card" data-pane="pending"><div id="plist"></div></section>
@@ -98,11 +107,66 @@
     </div>
     <div class="card"><div class="tablewrap"><table id="vtable"></table></div></div>
   </section>
+
+  <section data-pane="rpt" hidden>
+    <div class="card" style="margin-bottom:16px">
+      <h2>تقرير الحدث</h2>
+      <p class="muted small">ملخص المسجلين والحضور لكل نوع ولكل فترة، مع منحنى وصول الضيوف. يتحدّث من بيانات الشيت لحظة فتحه.</p>
+      <div class="toolbar" style="margin:12px 0 0">
+        <a class="btn" id="rptopen" href="report.html" target="_blank" rel="noopener">فتح التقرير (طباعة / PDF)</a>
+        <button class="btn ghost" id="rptxlsx">تقرير Excel كامل</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <h2>تصدير قائمة</h2>
+      <div class="xgrid">
+        <div><label>النوع</label>
+          <div class="chips" id="xtypes">
+            <label><input type="checkbox" value="vip" checked> VIP</label>
+            <label><input type="checkbox" value="press" checked> إعلام</label>
+            <label><input type="checkbox" value="public" checked> ضيوف</label>
+          </div></div>
+        <div><label for="xstatus">الحالة</label>
+          <select id="xstatus">
+            <option value="all">كل المسجلين</option><option value="approved">المعتمدين</option>
+            <option value="attended">الحضور الفعلي</option><option value="noshow">معتمد ولم يحضر</option>
+            <option value="pending">قيد المراجعة</option><option value="rejected">المرفوضين</option>
+          </select></div>
+        <div><label for="xsess">الفترة</label>
+          <select id="xsess"><option value="all">الفترتين</option><option value="am">الصباحية</option><option value="pm">المسائية</option></select></div>
+      </div>
+      <div class="toolbar" style="margin:14px 0 0">
+        <button class="btn" id="xgo">تصدير Excel</button>
+        <span class="muted" id="xcount"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>تصدير للـ CRM</h2>
+      <p class="muted small">ملفان منفصلان بصيغة استيراد الـ CRM (لوحة الـ CRM ← استيراد ليدز). المرفوضون لا يُصدَّرون. إعادة رفع نفس الملف لا تكرر أحداً.</p>
+      <div class="crmrow">
+        <div class="crmbox">
+          <b>الضيوف</b> <span class="muted small" id="crmn1"></span>
+          <p class="muted small">يتوزّعون على المبيعات تلقائياً كأي عميل.</p>
+          <button class="btn ghost" id="crm1">تحميل CSV الضيوف</button>
+        </div>
+        <div class="crmbox warnb">
+          <b>VIP + الإعلام</b> <span class="muted small" id="crmn2"></span>
+          <p class="small"><b>قبل الرفع:</b> في الـ CRM ← الإعدادات ← أطفئ <b>«التوزيع التلقائي»</b>، ارفع الملف، ثم أعد تشغيله. هكذا يبقون عند المدير بوسم «VIP» أو «إعلام» في اسم الإعلان.</p>
+          <button class="btn ghost" id="crm2">تحميل CSV VIP + الإعلام</button>
+        </div>
+      </div>
+      <p class="muted small" id="crmbad" style="margin-top:10px"></p>
+    </div>
+  </section>
 </main>
 <div id="toast" hidden></div>
 
 <script src="config.js"></script>
 <script src="assets/api.js"></script>
+<script src="assets/vendor/xlsx.mini.min.js"></script>
+<script src="assets/reports.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 let S = store.get('mrg_admin_s'), USER = null, EVENTS = [], REGS = [], INV = [];
@@ -153,7 +217,7 @@ async function loadEvent(){
 }
 async function loadRegs(){
   const d = await call({ a: 'list', event: ev().code });
-  REGS = d.regs || []; renderStats(); renderPending(); renderAll();
+  REGS = d.regs || []; renderStats(); renderPending(); renderAll(); renderExport();
 }
 function renderStats(){
   const c = { total: REGS.length, vip: 0, pending: 0, approved: 0, rejected: 0, in: 0 };
@@ -271,6 +335,27 @@ document.querySelector('.tabs').addEventListener('click', e => {
   document.querySelectorAll('[data-pane]').forEach(p => p.hidden = p.dataset.pane !== b.dataset.tab);
 });
 $('ev').onchange = loadEvent;
+
+// ---------- reports & export ----------
+const xopts = () => ({ types: [...document.querySelectorAll('#xtypes input:checked')].map(i => i.value), status: $('xstatus').value, session: $('xsess').value });
+function renderExport(){
+  if (!$('xcount')) return;
+  $('xcount').textContent = RPT.filter(REGS, xopts()).length + ' شخص';
+  const g = RPT.crmRows(ev(), REGS, ['public']), v = RPT.crmRows(ev(), REGS, ['vip', 'press']);
+  $('crmn1').textContent = '(' + g.length + ')'; $('crmn2').textContent = '(' + v.length + ')';
+  const bad = [...g, ...v].filter(r => !r.ok);
+  $('crmbad').textContent = bad.length ? `⚠️ ${bad.length} رقم بصيغة لن يقبلها الـ CRM (سيظهرون في تقرير الاستيراد كأخطاء): ` + bad.slice(0, 6).map(r => r.cells[2] + ' ' + r.cells[3]).join('، ') + (bad.length > 6 ? '…' : '') : '';
+}
+['xtypes', 'xstatus', 'xsess'].forEach(id => $(id).addEventListener('change', renderExport));
+$('xgo').onclick = () => {
+  const o = xopts(), rows = RPT.filter(REGS, o);
+  if (!rows.length) return toast('القائمة فاضية بهذه الاختيارات');
+  const label = [o.types.length === 3 ? 'الكل' : o.types.map(t => RPT.TYPE_AR[t]).join('+'), $('xstatus').selectedOptions[0].text, o.session === 'all' ? '' : $('xsess').selectedOptions[0].text].filter(Boolean).join('-');
+  RPT.excelList(ev(), rows, label);
+};
+$('rptxlsx').onclick = () => RPT.excelFull(ev(), REGS);
+$('crm1').onclick = () => { const r = RPT.crmCsv(ev(), REGS, ['public'], 'ضيوف'); toast(`تم: ${r.total} سطر`); };
+$('crm2').onclick = () => { const r = RPT.crmCsv(ev(), REGS, ['vip', 'press'], 'VIP-إعلام'); toast(`تم: ${r.total} سطر — تذكّر إطفاء التوزيع التلقائي قبل الرفع`); };
 $('copypub').onclick = () => copy($('publink').textContent);
 $('copypress').onclick = () => copy($('presslink').textContent);
 setInterval(() => { if (S && !$('main').hidden && document.visibilityState === 'visible') loadRegs(); }, 45000);
